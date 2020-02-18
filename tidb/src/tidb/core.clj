@@ -22,6 +22,7 @@
                   [register :as register]
                   [sequential :as sequential]
                   [sets :as set]
+                  [simple :as simple]
                   [table :as table]]))
 
 (def oses
@@ -42,6 +43,7 @@
    :set             set/workload
    :set-cas         set/cas-workload
    :sequential      sequential/workload
+   :simple          simple/workload
    :table           table/workload})
 
 (def workload-options
