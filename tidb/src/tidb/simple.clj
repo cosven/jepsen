@@ -2,6 +2,7 @@
   "A test for long time transaction"
   (:refer-clojure :exclude [test])
   (:require [clojure.string :as str]
+            [clojure.pprint :as p]
             [jepsen
              [client :as client]
              [generator :as gen]
@@ -15,6 +16,18 @@
 (defrecord SimpleClient [conn]
   client/Client
   (open! [this test node]
+    ;; conn looks like:
+    ;; {:socketTimeout 10000,
+    ;;  :password "",
+    ;;  :classname "org.mariadb.jdbc.Driver",
+    ;;  :subprotocol "mariadb",
+    ;;  :tidb.sql/test {:auto-retry :default, :auto-retry-limit :default},
+    ;;  :connectTimeout 10000,
+    ;;  :connection
+    ;;  #object[org.mariadb.jdbc.MariaDbConnection 0x83921b0 "org.mariadb.jdbc.MariaDbConnection@83921b0"],
+    ;;  :user "root",
+    ;;  :subname "//n1:4000/test",
+    ;;  :tidb.sql/node "n1"}
     (assoc this :conn (c/open node test)))
 
   (setup! [this test]
@@ -43,6 +56,8 @@
           (catch java.sql.SQLIntegrityConstraintViolationException e nil)))))
 
   (invoke! [this test op]
+    ;; op looks like:
+    ;; {:type :invoke, :f :long-txn, :process 1, :time 1202166897}
     (case (:f op)
       :read
       (->>
@@ -51,11 +66,15 @@
        (into (sorted-map))
        (assoc op :type :ok, :value))
 
+      :long-txn
+      (with-txn op [session conn]
+        )
+
       :update
       (do
         (c/update! conn :test_simple
                    {:first_name (rand-nth ["sw" "cosven"])}
-                   ["age = ?" "25"])
+                   ["age = ?" 25])
         (assoc op :type :ok :value {:update "first_name"}))))
 
   (teardown! [this test])
@@ -73,6 +92,10 @@
   [_ _]
   {:type :invoke, :f :update})
 
+(defn long-txn
+  [_ _]
+  {:type :invoke, :f :long-txn})
+
 (defn checker
   []
   (reify checker/Checker
@@ -84,6 +107,7 @@
 (defn workload
   [opts]
   {:client (SimpleClient. nil)
-   :generator (->> (gen/mix [read write])
+   :generator (->> (gen/mix [read write long-txn])
+                   (gen/stagger 1)
                    (gen/time-limit (:time-limit opts)))
    :checker (checker)})
